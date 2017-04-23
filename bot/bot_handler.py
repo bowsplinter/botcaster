@@ -38,10 +38,15 @@ def handle_link(message):
 
 @bot.callback_query_handler(func=lambda call: call.data[:1]=='Y')
 def handle_link_callback_yes(call):
+    #TODO get (optional) description for link object
     link = call.data[1:]
-    print(link)
-    bot.edit_message_text(text="Sent!",chat_id=call.from_user.id, message_id=call.message.message_id)
-    bot.edit_message_reply_markup(chat_id=call.from_user.id, message_id=call.message.message_id)
+    user = User.objects.get(pk=call.from_user.id)
+    Link(author=user, link=link, description="").save()
+    followers = Connection.objects.filter(following__username=call.from_user.username)
+    for f in followers:
+        bot.send_message(f.follower.id,link)
+    bot.edit_message_text(text="Sent to your followers!",chat_id=call.from_user.id, message_id=call.message.message_id)
+    # bot.edit_message_reply_markup(chat_id=call.from_user.id, message_id=call.message.message_id)
     bot.answer_callback_query(call.id, "") # may not be needed since removing markup
 
 @bot.callback_query_handler(func=lambda call: call.data[:1]=='N')
@@ -57,6 +62,21 @@ def is_link(message):
     return False
 
 ## Handle commands ##
+
+@bot.message_handler(commands=['start'])
+def handle_start(message):
+    try:
+        user = User.objects.get(pk=message.chat.id)
+        bot.send_message(message.chat.id, text_messages['already_registerd'])
+    except ObjectDoesNotExist:
+        user = User(
+                    id=message.chat.id,
+                    first_name=message.chat.first_name,
+                    last_name=message.chat.last_name,
+                    username=message.chat.username
+        )
+        user.save()
+        bot.send_message(message.chat.id, text_messages['help'])
 
 @bot.message_handler(commands=['follow'])
 def handle_follow(message):
@@ -78,20 +98,6 @@ def handle_follow_1(message):
         bot.send_message(message.chat.id, 'username not found in our system')
     finally:
         follower.set_state(0)
-@bot.message_handler(commands=['start'])
-def handle_start(message):
-    try:
-        user = User.objects.get(pk=message.chat.id)
-        bot.send_message(message.chat.id, text_messages['already_registerd'])
-    except ObjectDoesNotExist:
-        user = User(
-                    id=message.chat.id,
-                    first_name=message.chat.first_name,
-                    last_name=message.chat.last_name,
-                    username=message.chat.username
-        )
-        user.save()
-        bot.send_message(message.chat.id, text_messages['help'])
 
 @bot.message_handler(commands=['help'])
 def send_help(message):
@@ -99,6 +105,8 @@ def send_help(message):
 
 @bot.message_handler(func=lambda m: True)
 def echo_all(message):
+    L = Link.objects.all()
+    print(L)
     bot.send_message(message.chat.id, text_messages['unknown_message'])
 
 def main():
