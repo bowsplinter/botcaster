@@ -6,6 +6,7 @@ from telebot import types
 from django.core.exceptions import ObjectDoesNotExist
 
 from accounts.models import User, Connection
+from posts.models import Link
 
 if "BOTCASTER_BOT_TOKEN" not in os.environ:
     raise AssertionError("Please configure BOTCASTER_BOT_TOKEN as an environment variable")
@@ -29,8 +30,24 @@ text_messages = {
 
 @bot.message_handler(func=lambda m: is_link(m))
 def handle_link(message):
-    bot.reply_to(message, "That's a link, do you want to publish it to your feed?")
-    # TODO: handle state
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    yes = types.InlineKeyboardButton('Yes', callback_data="Y" + message.text)
+    no = types.InlineKeyboardButton('No', callback_data="N")
+    markup.add(yes, no)
+    bot.send_message(message.chat.id, "That's a link, do you want to post it to your followers?", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: call.data[:1]=='Y')
+def handle_link_callback_yes(call):
+    link = call.data[1:]
+    print(link)
+    bot.edit_message_text(text="Sent!",chat_id=call.from_user.id, message_id=call.message.message_id)
+    bot.edit_message_reply_markup(chat_id=call.from_user.id, message_id=call.message.message_id)
+    bot.answer_callback_query(call.id, "") # may not be needed since removing markup
+
+@bot.callback_query_handler(func=lambda call: call.data[:1]=='N')
+def handle_link_callback_no(call):
+    bot.edit_message_reply_markup(chat_id=call.from_user.id, message_id=call.message.message_id)
+    bot.answer_callback_query(call.id, "") # may not be needed since removing markup
 
 def is_link(message):
     if (message.entities):
@@ -56,12 +73,11 @@ def handle_follow_1(message):
         following = User.objects.get(username=message.text)
         c = Connection(follower=follower, following=following)
         c.save()
-        follower.set_state = 0
         bot.send_message(message.chat.id, 'Following @' + following.username)
     except ObjectDoesNotExist:
         bot.send_message(message.chat.id, 'username not found in our system')
-        handle_follow(message) 
-
+    finally:
+        follower.set_state(0)
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     try:
