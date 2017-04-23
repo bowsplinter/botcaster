@@ -3,7 +3,9 @@ import os
 
 from telebot import types
 
-from accounts.models import User
+from django.core.exceptions import ObjectDoesNotExist
+
+from accounts.models import User, Connection
 
 if "BOTCASTER_BOT_TOKEN" not in os.environ:
     raise AssertionError("Please configure BOTCASTER_BOT_TOKEN as an environment variable")
@@ -41,14 +43,24 @@ def is_link(message):
 
 @bot.message_handler(commands=['follow'])
 def handle_follow(message):
-    if len(message.text.split()) == 1:
-        print('no name')
-        markup = types.ForceReply(selective=True)
-        bot.send_message(message.chat.id, 'enter name to follow', reply_markup = markup)
-        # TODO: handle state
-    else:
-        pass
-        #TODO try to follow
+    # TODO: allow /follow username in one line
+    user = User.objects.get(pk=message.chat.id)
+    user.set_state(1)
+    markup = types.ForceReply(selective=False)
+    bot.send_message(message.chat.id, 'username to follow', reply_markup = markup)
+
+@bot.message_handler(func=lambda m: User.objects.get(pk=m.chat.id).get_state() == 1)
+def handle_follow_1(message):
+    follower = User.objects.get(pk=message.chat.id)
+    try:
+        following = User.objects.get(username=message.text)
+        c = Connection(follower=follower, following=following)
+        c.save()
+        follower.set_state = 0
+        bot.send_message(message.chat.id, 'Following @' + following.username)
+    except ObjectDoesNotExist:
+        bot.send_message(message.chat.id, 'username not found in our system')
+        handle_follow(message) 
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
